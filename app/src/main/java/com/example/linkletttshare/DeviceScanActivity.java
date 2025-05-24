@@ -20,6 +20,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
+import android.widget.Button;
 import android.widget.ListView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
@@ -37,6 +38,7 @@ import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 public class DeviceScanActivity extends AppCompatActivity {
@@ -53,6 +55,7 @@ public class DeviceScanActivity extends AppCompatActivity {
     private DeviceAdapter deviceAdapter;
     private List<BluetoothDevice> deviceList;
     private Contact contactToShare;
+    private Button btnRescanDevices; // Added reference to rescan button
     
     private BluetoothConnectionService connectionService;
     private String connectedDeviceName = null;
@@ -62,40 +65,136 @@ public class DeviceScanActivity extends AppCompatActivity {
         @Override
         public void onReceive(Context context, Intent intent) {
             String action = intent.getAction();
+            Log.d(TAG, "Received action: " + action);
+            
             if (BluetoothDevice.ACTION_FOUND.equals(action)) {
+                // Device discovered
                 BluetoothDevice device = null;
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice.class);
-                } else {
-                    device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
-                }
-                
-                if (device != null) {
-                    // Get device name safely
-                    String deviceName = "Unknown Device";
-                    if (ActivityCompat.checkSelfPermission(DeviceScanActivity.this, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED) {
-                        deviceName = device.getName() != null ? device.getName() : "Unknown Device";
+                try {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice.class);
+                    } else {
+                        device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
                     }
                     
-                    Log.d(TAG, "Device found: " + deviceName + " - " + device.getAddress());
-                    
-                    boolean deviceExists = false;
-                    for (BluetoothDevice d : deviceList) {
-                        if (d.getAddress().equals(device.getAddress())) {
-                            deviceExists = true;
-                            break;
+                    if (device != null) {
+                        // Get device name safely
+                        String deviceName = "Unknown Device";
+                        if (ActivityCompat.checkSelfPermission(DeviceScanActivity.this, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED) {
+                            deviceName = device.getName() != null ? device.getName() : device.getAddress();
+                        }
+                        
+                        // Get signal strength if available
+                        short rssi = intent.getShortExtra(BluetoothDevice.EXTRA_RSSI, Short.MIN_VALUE);
+                        String signalStrength = rssi != Short.MIN_VALUE ? " (Signal: " + rssi + "dBm)" : "";
+                        
+                        Log.d(TAG, "Device found: " + deviceName + signalStrength + " - " + device.getAddress());
+                        
+                        // Check if device already exists in our list
+                        boolean deviceExists = false;
+                        for (BluetoothDevice d : deviceList) {
+                            if (d.getAddress().equals(device.getAddress())) {
+                                deviceExists = true;
+                                break;
+                            }
+                        }
+                        
+                        if (!deviceExists) {
+                            deviceList.add(device);
+                            deviceAdapter.notifyDataSetChanged();
+                            // Show toast for device found
+                            Toast.makeText(DeviceScanActivity.this, "Found device: " + deviceName, Toast.LENGTH_SHORT).show();
                         }
                     }
-                    if (!deviceExists) {
-                        deviceList.add(device);
-                        deviceAdapter.notifyDataSetChanged();
-                    }
+                } catch (Exception e) {
+                    Log.e(TAG, "Error processing discovered device", e);
                 }
             } else if (BluetoothAdapter.ACTION_DISCOVERY_FINISHED.equals(action)) {
+                // Discovery finished
                 progressBar.setVisibility(View.GONE);
                 if (deviceList.isEmpty()) {
-                    Toast.makeText(DeviceScanActivity.this, "No devices found", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(DeviceScanActivity.this, "No devices found. Make sure other devices are discoverable.", Toast.LENGTH_LONG).show();
+                    // Show button to start scan again
+                    if (btnRescanDevices != null) {
+                        btnRescanDevices.setVisibility(View.VISIBLE);
+                    }
+                } else {
+                    Toast.makeText(DeviceScanActivity.this, "Found " + deviceList.size() + " device(s)", Toast.LENGTH_SHORT).show();
                 }
+            } else if (BluetoothAdapter.ACTION_STATE_CHANGED.equals(action)) {
+                // Bluetooth state changed
+                final int state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR);
+                
+                if (state == BluetoothAdapter.STATE_OFF) {
+                    Toast.makeText(DeviceScanActivity.this, "Bluetooth has been turned off", Toast.LENGTH_SHORT).show();
+                } else if (state == BluetoothAdapter.STATE_ON) {
+                    Toast.makeText(DeviceScanActivity.this, "Bluetooth has been turned on", Toast.LENGTH_SHORT).show();
+                    // Start discovery again when Bluetooth is turned on
+                    startDiscovery();
+                }
+            } else if (BluetoothAdapter.ACTION_DISCOVERY_STARTED.equals(action)) {
+                // Discovery started
+                progressBar.setVisibility(View.VISIBLE);
+                Toast.makeText(DeviceScanActivity.this, "Scanning for devices...", Toast.LENGTH_SHORT).show();
+                // Clear previous results when starting a new scan
+                deviceList.clear();
+                deviceAdapter.notifyDataSetChanged();
+            }
+        }
+    };
+    
+    // Method to start Bluetooth device discovery
+    private void startDiscovery() {
+        if (bluetoothAdapter == null) {
+            Toast.makeText(this, "Bluetooth not supported", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        
+        // Check if Bluetooth is enabled
+        if (!bluetoothAdapter.isEnabled()) {
+            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED) {
+                Intent enableBtIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
+                startActivityForResult(enableBtIntent, 1);
+                return;
+            } else {
+                ActivityCompat.requestPermissions(this,
+                        new String[]{Manifest.permission.BLUETOOTH_CONNECT},
+                        2);
+                return;
+            }
+        }
+        
+        // Make device discoverable
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_ADVERTISE) == PackageManager.PERMISSION_GRANTED) {
+            Intent discoverableIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE);
+            discoverableIntent.putExtra(BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION, 300);
+            startActivity(discoverableIntent);
+        }
+        
+        // Check scan permission
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this,
+                    new String[]{Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT},
+                    123);
+            return;
+        }
+        
+        // Cancel any existing discovery
+        if (bluetoothAdapter.isDiscovering()) {
+            bluetoothAdapter.cancelDiscovery();
+        }
+        
+        // Start discovery
+        boolean success = bluetoothAdapter.startDiscovery();
+        Log.d(TAG, "Starting Bluetooth discovery: " + (success ? "success" : "failed"));
+        
+        if (!success) {
+            Toast.makeText(this, "Failed to start Bluetooth discovery", Toast.LENGTH_SHORT).show();
+        } else {
+            progressBar.setVisibility(View.VISIBLE);
+            // Hide rescan button during active scan
+            if (btnRescanDevices != null) {
+                btnRescanDevices.setVisibility(View.GONE);
             }
         }
     };
@@ -138,48 +237,6 @@ public class DeviceScanActivity extends AppCompatActivity {
             return true;
         }
     });
-
-    private final BroadcastReceiver bluetoothReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            String action = intent.getAction();
-            if (BluetoothDevice.ACTION_FOUND.equals(action)) {
-                BluetoothDevice device = null;
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice.class);
-                } else {
-                    device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
-                }
-                
-                if (device != null) {
-                    // Get device name safely
-                    String deviceName = "Unknown Device";
-                    if (ActivityCompat.checkSelfPermission(DeviceScanActivity.this, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED) {
-                        deviceName = device.getName() != null ? device.getName() : "Unknown Device";
-                    }
-                    
-                    Log.d(TAG, "Device found: " + deviceName + " - " + device.getAddress());
-                    
-                    boolean deviceExists = false;
-                    for (BluetoothDevice d : deviceList) {
-                        if (d.getAddress().equals(device.getAddress())) {
-                            deviceExists = true;
-                            break;
-                        }
-                    }
-                    if (!deviceExists) {
-                        deviceList.add(device);
-                        deviceAdapter.notifyDataSetChanged();
-                    }
-                }
-            } else if (BluetoothAdapter.ACTION_DISCOVERY_FINISHED.equals(action)) {
-                progressBar.setVisibility(View.GONE);
-                if (deviceList.isEmpty()) {
-                    Toast.makeText(DeviceScanActivity.this, "No devices found", Toast.LENGTH_SHORT).show();
-                }
-            }
-        }
-    };
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -240,31 +297,44 @@ public class DeviceScanActivity extends AppCompatActivity {
             progressBar.setVisibility(View.VISIBLE);
         });
 
-        // Register for broadcasts
+        // Add a button for manual rescan
+        btnRescanDevices = new Button(this);
+        btnRescanDevices.setId(View.generateViewId()); // Generate a runtime ID
+        btnRescanDevices.setText("Rescan for Devices");
+        btnRescanDevices.setVisibility(View.GONE); // Initially hidden
+        
+        // Add the button to the layout below the list view
+        ViewGroup layout = (ViewGroup) deviceListView.getParent();
+        layout.addView(btnRescanDevices);
+        
+        // Set click listener for rescan button
+        btnRescanDevices.setOnClickListener(v -> startDiscovery());
+        
+        // Register for all relevant Bluetooth broadcasts
         IntentFilter filter = new IntentFilter();
         filter.addAction(BluetoothDevice.ACTION_FOUND);
         filter.addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED);
+        filter.addAction(BluetoothAdapter.ACTION_DISCOVERY_STARTED);
+        filter.addAction(BluetoothAdapter.ACTION_STATE_CHANGED);
         registerReceiver(bluetoothReceiver, filter);
-        Log.d(TAG, "Registered Bluetooth receiver");
+        Log.d(TAG, "Registered Bluetooth receiver with extended actions");
 
         // Start discovery
-        if (bluetoothAdapter != null && bluetoothAdapter.isEnabled()) {
-            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED) {
-                if (bluetoothAdapter.isDiscovering()) {
-                    bluetoothAdapter.cancelDiscovery();
+        startDiscovery();
+        
+        // Also show paired devices
+        if (bluetoothAdapter != null) {
+            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED) {
+                Set<BluetoothDevice> pairedDevices = bluetoothAdapter.getBondedDevices();
+                if (pairedDevices.size() > 0) {
+                    Log.d(TAG, "Found " + pairedDevices.size() + " paired devices");
+                    // Add paired devices to the list
+                    for (BluetoothDevice device : pairedDevices) {
+                        deviceList.add(device);
+                    }
+                    deviceAdapter.notifyDataSetChanged();
                 }
-                bluetoothAdapter.startDiscovery();
-                progressBar.setVisibility(View.VISIBLE);
-                Log.d(TAG, "Starting Bluetooth discovery");
-            } else {
-                // Request permission if not granted
-                ActivityCompat.requestPermissions(this, 
-                        new String[]{Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT}, 
-                        123);
             }
-        } else {
-            Toast.makeText(this, "Bluetooth is not enabled", Toast.LENGTH_SHORT).show();
-            finish();
         }
     }
 
