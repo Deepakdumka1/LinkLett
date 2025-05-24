@@ -1,0 +1,28 @@
+<resources>
+    <string name="app_name">LinkLett</string>
+    <string name="share_contacts_wirelessly">Share Contacts Wirelessly</string>
+    <string name="select_contact_instruction">Select a contact and share it via NFC or Bluetooth</string>
+    <string name="selected_contact">Selected Contact</string>
+    <string name="no_contact_selected">No contact selected</string>
+    <string name="select_contact">Select Contact</string>
+    <string name="sharing_options">Sharing Options</string>
+    <string name="nfc_sharing">NFC Sharing</string>
+    <string name="nfc_not_supported">NFC not supported on this device</string>
+    <string name="nfc_disabled">NFC is disabled in system settings</string>
+    <string name="nfc_available">NFC is available</string>
+    <string name="bluetooth_sharing">Bluetooth Sharing</string>
+    <string name="bluetooth_disabled">Bluetooth is disabled in system settings</string>
+    <string name="bluetooth_not_supported">Bluetooth not supported on this device</string>
+    <string name="bluetooth_available">Bluetooth is available</string>
+    <string name="scan_for_devices">Scan for Devices</string>
+    <string name="scan_devices">Scan Devices</string>
+    <string name="scanning_for_devices">Scanning for nearby devices…</string>
+    <string name="available_devices">Available Devices</string>
+    <string name="share_icon">Share icon</string>
+    <string name="contact_icon">Contact icon</string>
+    <string name="nfc_icon">NFC icon</string>
+    <string name="bluetooth_icon">Bluetooth icon</string>
+    <string name="title_connected_to">Connected to %1$s</string>
+    <string name="title_connecting">Connecting...</string>
+    <string name="title_not_connected">Not connected</string>
+</resources>
