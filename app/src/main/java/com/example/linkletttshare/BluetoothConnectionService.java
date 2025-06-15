@@ -17,7 +17,7 @@ import java.util.UUID;
 
 /**
  * This class handles all Bluetooth connections and communication between devices.
- * It manages the different states of a Bluetooth connection (none, listen, connecting, connected)
+ * It manages the different, states of a Bluetooth connection (none, listen, connecting, connected)
  * and provides methods to start/stop services and send/receive data.
  */
 public class BluetoothConnectionService {
