@@ -41,7 +41,7 @@ public class BluetoothConnectionService {
     public static final int MESSAGE_TOAST = 5;
     
     // Key names received 
-    public static final String DEVICE_NAME = "device_name";
+    public static final String DEVICE_NAME = "device-Name";
     public static final String TOAST = "toast";
     
     // Member fields
